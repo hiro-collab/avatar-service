@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avatar Service</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="kicker">Three.js VRM runtime</p>
+          <h1>Avatar Service</h1>
+        </div>
+        <div id="runtime-status" class="runtime-status" aria-live="polite">Ready</div>
+      </header>
+
+      <main class="workspace">
+        <section class="stage-shell" aria-label="Avatar stage">
+          <canvas id="avatar-canvas"></canvas>
+          <div id="empty-state" class="empty-state">
+            <span class="empty-state__mark">VRM</span>
+            <strong>No model loaded</strong>
+            <span>Select a local .vrm file to start.</span>
+          </div>
+        </section>
+
+        <aside class="control-panel" aria-label="Avatar controls">
+          <section class="control-section">
+            <label class="file-loader">
+              <span>Load VRM</span>
+              <input id="vrm-input" type="file" accept=".vrm,model/gltf-binary" />
+            </label>
+            <p id="model-name" class="subtle">Waiting for local model</p>
+          </section>
+
+          <section class="control-section">
+            <div class="section-heading">
+              <h2>Phase</h2>
+              <span id="phase-readout">idle</span>
+            </div>
+            <div id="phase-buttons" class="segmented" role="group" aria-label="Avatar phase">
+              <button type="button" data-phase="idle" class="is-active">idle</button>
+              <button type="button" data-phase="listening">listening</button>
+              <button type="button" data-phase="thinking">thinking</button>
+              <button type="button" data-phase="speaking">speaking</button>
+              <button type="button" data-phase="error">error</button>
+            </div>
+          </section>
+
+          <section class="control-section form-grid">
+            <label>
+              <span>Emotion</span>
+              <select id="emotion-select">
+                <option value="neutral">neutral</option>
+                <option value="happy">happy</option>
+                <option value="serious">serious</option>
+                <option value="surprised">surprised</option>
+                <option value="troubled">troubled</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Gesture</span>
+              <select id="gesture-select">
+                <option value="none">none</option>
+                <option value="sword_sign">sword_sign</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Turn ID</span>
+              <input id="turn-id-input" type="text" placeholder="turn-001" />
+            </label>
+
+            <label>
+              <span>Text</span>
+              <textarea id="text-input" rows="3" placeholder="optional utterance"></textarea>
+            </label>
+          </section>
+
+          <section class="control-section">
+            <button id="dispatch-button" type="button" class="primary-button">Dispatch state</button>
+            <pre id="event-preview" class="event-preview" aria-label="Last avatar state event"></pre>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
