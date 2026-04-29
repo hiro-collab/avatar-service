@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -7,7 +7,9 @@ import process from "node:process";
 const root = resolve(import.meta.dirname, "..");
 const tmpDir = resolve(root, ".tmp", "dev-server-smoke");
 const statusPath = resolve(tmpDir, "runtime-status.json");
+const nestedStatusPath = resolve(tmpDir, "nested", "runtime", "status.json");
 const port = 5199;
+const runningPort = 5200;
 
 rmSync(tmpDir, { recursive: true, force: true });
 mkdirSync(tmpDir, { recursive: true });
@@ -24,6 +26,12 @@ await withPortInUse(port, async () => {
 const health = runDevServer(["health", "--runtime-status-file", statusPath, "--json"]);
 assert(health.status !== 0, "health should be non-zero when no runtime is running");
 assert(combinedOutput(health).includes('"ok": false'), "health output should include ok=false");
+
+const started = runDevServer(["start", "--port", String(runningPort), "--runtime-status-file", nestedStatusPath]);
+assert(started.status === 0, `start should create missing status parents: ${combinedOutput(started)}`);
+assert(existsSync(nestedStatusPath), "runtime status should be written under a missing parent directory");
+const stopped = runDevServer(["stop", "--runtime-status-file", nestedStatusPath]);
+assert(stopped.status === 0, `stop should succeed for the nested runtime status: ${combinedOutput(stopped)}`);
 
 rmSync(tmpDir, { recursive: true, force: true });
 console.log("dev-server smoke checks passed");

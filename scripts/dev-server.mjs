@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import process from "node:process";
 
 const root = resolve(import.meta.dirname, "..");
@@ -408,6 +408,7 @@ function writeRuntimeStatus(options, state) {
     module: moduleName,
     ...state
   };
+  mkdirSync(dirname(options.runtimeStatusFile), { recursive: true });
   writeFileSync(options.runtimeStatusFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
