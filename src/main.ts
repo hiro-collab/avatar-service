@@ -1,6 +1,11 @@
 import "./style.css";
 import { AvatarController } from "./avatar/AvatarController";
-import { AvatarRenderer, type AvatarLoadStatus } from "./avatar/AvatarRenderer";
+import {
+  AvatarRenderer,
+  type AvatarLoadStatus,
+  type AvatarViewSettings,
+  type CameraProjection
+} from "./avatar/AvatarRenderer";
 import {
   createAvatarStateEvent,
   dispatchAvatarState,
@@ -18,6 +23,20 @@ const modelUrlInput = getElement<HTMLInputElement>("model-url-input");
 const loadModelUrlButton = getElement<HTMLButtonElement>("load-model-url-button");
 const backgroundColorInput = getElement<HTMLInputElement>("background-color-input");
 const backgroundDetail = getElement<HTMLElement>("background-detail");
+const viewSettingsReadout = getElement<HTMLElement>("view-settings-readout");
+const cameraProjectionSelect = getElement<HTMLSelectElement>("camera-projection-select");
+const cameraDistanceInput = getElement<HTMLInputElement>("camera-distance-input");
+const cameraDistanceReadout = getElement<HTMLOutputElement>("camera-distance-readout");
+const cameraFovLabel = getElement<HTMLLabelElement>("camera-fov-label");
+const cameraFovInput = getElement<HTMLInputElement>("camera-fov-input");
+const cameraFovReadout = getElement<HTMLOutputElement>("camera-fov-readout");
+const orthoWidthLabel = getElement<HTMLLabelElement>("ortho-width-label");
+const orthoWidthInput = getElement<HTMLInputElement>("ortho-width-input");
+const orthoWidthReadout = getElement<HTMLOutputElement>("ortho-width-readout");
+const avatarHeightInput = getElement<HTMLInputElement>("avatar-height-input");
+const avatarHeightReadout = getElement<HTMLOutputElement>("avatar-height-readout");
+const lightHeightInput = getElement<HTMLInputElement>("light-height-input");
+const lightHeightReadout = getElement<HTMLOutputElement>("light-height-readout");
 const modelName = getElement<HTMLElement>("model-name");
 const runtimeStatus = getElement<HTMLElement>("runtime-status");
 const sseGlobalStatus = getElement<HTMLElement>("sse-global-status");
@@ -69,6 +88,7 @@ const unsubscribeState = subscribeAvatarState((event) => {
 });
 
 hydrateSettingsFromUrl();
+applyViewSettingsFromInputs();
 updatePostureIntensityReadout();
 dispatchManualState("idle");
 
@@ -120,6 +140,11 @@ window.addEventListener("beforeunload", () => {
 backgroundColorInput.addEventListener("input", () => {
   applyBackgroundColor(backgroundColorInput.value);
 });
+
+cameraProjectionSelect.addEventListener("change", applyViewSettingsFromInputs);
+for (const input of [cameraDistanceInput, cameraFovInput, orthoWidthInput, avatarHeightInput, lightHeightInput]) {
+  input.addEventListener("input", applyViewSettingsFromInputs);
+}
 
 if (eventsUrlInput.value.trim()) {
   connectSse();
@@ -192,6 +217,38 @@ function manualPostureCue(): AvatarPostureCue | undefined {
 
 function updatePostureIntensityReadout(): void {
   postureIntensityReadout.textContent = Number(postureIntensityInput.value).toFixed(2);
+}
+
+function applyViewSettingsFromInputs(): void {
+  syncViewSettingsControls(
+    renderer.setViewSettings({
+      projection: toCameraProjection(cameraProjectionSelect.value) ?? "perspective",
+      cameraDistance: Number(cameraDistanceInput.value),
+      cameraFov: Number(cameraFovInput.value),
+      orthographicWidth: Number(orthoWidthInput.value),
+      avatarHeight: Number(avatarHeightInput.value),
+      lightHeight: Number(lightHeightInput.value)
+    })
+  );
+}
+
+function syncViewSettingsControls(settings: AvatarViewSettings): void {
+  cameraProjectionSelect.value = settings.projection;
+  cameraDistanceInput.value = settings.cameraDistance.toFixed(2);
+  cameraFovInput.value = String(Math.round(settings.cameraFov));
+  orthoWidthInput.value = settings.orthographicWidth.toFixed(2);
+  avatarHeightInput.value = settings.avatarHeight.toFixed(2);
+  lightHeightInput.value = settings.lightHeight.toFixed(2);
+
+  viewSettingsReadout.textContent = settings.projection;
+  cameraDistanceReadout.textContent = settings.cameraDistance.toFixed(2);
+  cameraFovReadout.textContent = `${Math.round(settings.cameraFov)} deg`;
+  orthoWidthReadout.textContent = settings.orthographicWidth.toFixed(2);
+  avatarHeightReadout.textContent = settings.avatarHeight.toFixed(2);
+  lightHeightReadout.textContent = settings.lightHeight.toFixed(2);
+
+  cameraFovLabel.classList.toggle("is-hidden", settings.projection !== "perspective");
+  orthoWidthLabel.classList.toggle("is-hidden", settings.projection !== "orthographic");
 }
 
 function connectSse(): void {
@@ -278,6 +335,15 @@ function hydrateSettingsFromUrl(): void {
   const params = new URLSearchParams(window.location.search);
   modelUrlInput.value = params.get("model") ?? "";
   applyBackgroundColor(params.get("background") ?? params.get("bg") ?? backgroundColorInput.value);
+  const projection = toCameraProjection(params.get("projection") ?? params.get("camera_projection"));
+  if (projection) {
+    cameraProjectionSelect.value = projection;
+  }
+  applyNumberParam(params, ["camera_distance", "distance"], cameraDistanceInput);
+  applyNumberParam(params, ["camera_fov", "fov"], cameraFovInput);
+  applyNumberParam(params, ["orthographic_width", "ortho_width", "screen_width"], orthoWidthInput);
+  applyNumberParam(params, ["avatar_height"], avatarHeightInput);
+  applyNumberParam(params, ["light_height"], lightHeightInput);
   eventsUrlInput.value = params.get("events") ?? "";
   eventsTokenInput.value = params.get("events_token") ?? params.get("token") ?? "";
 }
@@ -321,7 +387,7 @@ function installAvatarConfigBridge(): () => void {
       return;
     }
 
-    const payload = data as { type?: unknown; background?: unknown; background_color?: unknown };
+    const payload = data as Record<string, unknown> & { type?: unknown; background?: unknown; background_color?: unknown };
     if (payload.type !== "avatar_config") {
       return;
     }
@@ -329,6 +395,11 @@ function installAvatarConfigBridge(): () => void {
     const background = typeof payload.background === "string" ? payload.background : payload.background_color;
     if (typeof background === "string") {
       applyBackgroundColor(background);
+    }
+
+    const viewSettings = viewSettingsFromConfig(payload);
+    if (Object.keys(viewSettings).length > 0) {
+      syncViewSettingsControls(renderer.setViewSettings(viewSettings));
     }
   };
 
@@ -359,6 +430,84 @@ function normalizeHexColor(value: string): string | null {
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
   }
   return null;
+}
+
+function applyNumberParam(params: URLSearchParams, names: string[], input: HTMLInputElement): void {
+  for (const name of names) {
+    const value = params.get(name);
+    if (value !== null && Number.isFinite(Number(value))) {
+      input.value = value;
+      return;
+    }
+  }
+}
+
+function viewSettingsFromConfig(payload: Record<string, unknown>): Partial<AvatarViewSettings> {
+  const settings: Partial<AvatarViewSettings> = {};
+  const projection = toCameraProjection(firstString(payload, ["projection", "camera_projection"]));
+  if (projection) {
+    settings.projection = projection;
+  }
+
+  const cameraDistance = firstNumber(payload, ["cameraDistance", "camera_distance", "distance"]);
+  if (cameraDistance !== null) {
+    settings.cameraDistance = cameraDistance;
+  }
+
+  const cameraFov = firstNumber(payload, ["cameraFov", "camera_fov", "fov"]);
+  if (cameraFov !== null) {
+    settings.cameraFov = cameraFov;
+  }
+
+  const orthographicWidth = firstNumber(payload, [
+    "orthographicWidth",
+    "orthographic_width",
+    "orthoWidth",
+    "ortho_width",
+    "screen_width"
+  ]);
+  if (orthographicWidth !== null) {
+    settings.orthographicWidth = orthographicWidth;
+  }
+
+  const avatarHeight = firstNumber(payload, ["avatarHeight", "avatar_height"]);
+  if (avatarHeight !== null) {
+    settings.avatarHeight = avatarHeight;
+  }
+
+  const lightHeight = firstNumber(payload, ["lightHeight", "light_height"]);
+  if (lightHeight !== null) {
+    settings.lightHeight = lightHeight;
+  }
+
+  return settings;
+}
+
+function firstNumber(payload: Record<string, unknown>, names: string[]): number | null {
+  for (const name of names) {
+    const value = payload[name];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return null;
+}
+
+function firstString(payload: Record<string, unknown>, names: string[]): string | null {
+  for (const name of names) {
+    const value = payload[name];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function toCameraProjection(value: unknown): CameraProjection | null {
+  return value === "perspective" || value === "orthographic" ? value : null;
 }
 
 function formatTurn(turnId: string | undefined): string {

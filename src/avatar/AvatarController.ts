@@ -1,4 +1,4 @@
-import { Euler, MathUtils, type Object3D } from "three";
+import { Euler, MathUtils, Vector3, type Object3D } from "three";
 import { type VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import { type AvatarEmotion, type AvatarPhase, type AvatarPostureCue, type AvatarStateEvent } from "./types";
 
@@ -11,24 +11,75 @@ type MotionPose = {
   neckPitch: number;
   chestPitch: number;
   spinePitch: number;
+  leftUpperArmPitch: number;
+  leftUpperArmYaw: number;
+  leftUpperArmRoll: number;
+  rightUpperArmPitch: number;
+  rightUpperArmYaw: number;
+  rightUpperArmRoll: number;
+  leftLowerArmPitch: number;
+  leftLowerArmYaw: number;
+  leftLowerArmRoll: number;
+  rightLowerArmPitch: number;
+  rightLowerArmYaw: number;
+  rightLowerArmRoll: number;
+  leftHandPitch: number;
+  leftHandYaw: number;
+  leftHandRoll: number;
+  rightHandPitch: number;
+  rightHandYaw: number;
+  rightHandRoll: number;
   mouthOpen: number;
 };
 
-type PostureOffset = {
-  headPitch?: number;
-  headYaw?: number;
-  headRoll?: number;
-  neckPitch?: number;
-  chestPitch?: number;
-  spinePitch?: number;
-};
+type PostureOffset = Partial<MotionPose>;
+
+type ArmPose = Pick<
+  MotionPose,
+  | "leftUpperArmPitch"
+  | "leftUpperArmYaw"
+  | "leftUpperArmRoll"
+  | "rightUpperArmPitch"
+  | "rightUpperArmYaw"
+  | "rightUpperArmRoll"
+  | "leftLowerArmPitch"
+  | "leftLowerArmYaw"
+  | "leftLowerArmRoll"
+  | "rightLowerArmPitch"
+  | "rightLowerArmYaw"
+  | "rightLowerArmRoll"
+  | "leftHandPitch"
+  | "leftHandYaw"
+  | "leftHandRoll"
+  | "rightHandPitch"
+  | "rightHandYaw"
+  | "rightHandRoll"
+>;
+
+type RotationCueTarget =
+  | "head"
+  | "neck"
+  | "chest"
+  | "spine"
+  | "leftUpperArm"
+  | "rightUpperArm"
+  | "leftLowerArm"
+  | "rightLowerArm"
+  | "leftHand"
+  | "rightHand";
 
 const CONTROLLED_BONES = [
   VRMHumanBoneName.Head,
   VRMHumanBoneName.Neck,
   VRMHumanBoneName.Chest,
   VRMHumanBoneName.UpperChest,
-  VRMHumanBoneName.Spine
+  VRMHumanBoneName.Spine,
+  VRMHumanBoneName.LeftUpperArm,
+  VRMHumanBoneName.RightUpperArm,
+  VRMHumanBoneName.LeftLowerArm,
+  VRMHumanBoneName.RightLowerArm,
+  VRMHumanBoneName.LeftHand,
+  VRMHumanBoneName.RightHand
 ] satisfies HumanBoneName[];
 
 const ZERO_POSE: MotionPose = {
@@ -38,8 +89,52 @@ const ZERO_POSE: MotionPose = {
   neckPitch: 0,
   chestPitch: 0,
   spinePitch: 0,
+  leftUpperArmPitch: 0,
+  leftUpperArmYaw: 0,
+  leftUpperArmRoll: 0,
+  rightUpperArmPitch: 0,
+  rightUpperArmYaw: 0,
+  rightUpperArmRoll: 0,
+  leftLowerArmPitch: 0,
+  leftLowerArmYaw: 0,
+  leftLowerArmRoll: 0,
+  rightLowerArmPitch: 0,
+  rightLowerArmYaw: 0,
+  rightLowerArmRoll: 0,
+  leftHandPitch: 0,
+  leftHandYaw: 0,
+  leftHandRoll: 0,
+  rightHandPitch: 0,
+  rightHandYaw: 0,
+  rightHandRoll: 0,
   mouthOpen: 0
 };
+
+const DEFAULT_ARM_REST_POSE: ArmPose = {
+  leftUpperArmPitch: 0,
+  leftUpperArmYaw: 0,
+  leftUpperArmRoll: 1.05,
+  rightUpperArmPitch: 0,
+  rightUpperArmYaw: 0,
+  rightUpperArmRoll: -1.05,
+  leftLowerArmPitch: 0.04,
+  leftLowerArmYaw: 0,
+  leftLowerArmRoll: 0.12,
+  rightLowerArmPitch: 0.04,
+  rightLowerArmYaw: 0,
+  rightLowerArmRoll: -0.12,
+  leftHandPitch: 0,
+  leftHandYaw: 0,
+  leftHandRoll: 0.04,
+  rightHandPitch: 0,
+  rightHandYaw: 0,
+  rightHandRoll: -0.04
+};
+
+const POSTURE_OFFSET_KEYS = Object.keys(ZERO_POSE).filter((key) => key !== "mouthOpen") as (keyof MotionPose)[];
+
+const tempWorldPositionA = new Vector3();
+const tempWorldPositionB = new Vector3();
 
 export class AvatarController {
   private vrm: VRM | null = null;
@@ -47,6 +142,7 @@ export class AvatarController {
   private emotion: AvatarEmotion = "neutral";
   private baseRotations = new Map<HumanBoneName, Euler>();
   private currentPose: MotionPose = { ...ZERO_POSE };
+  private armRestPose: ArmPose = { ...DEFAULT_ARM_REST_POSE };
   private blinkValue = 0;
   private blinkProgress = 0;
   private nextBlinkAt = 1.2;
@@ -68,6 +164,8 @@ export class AvatarController {
       }
     }
 
+    this.armRestPose = this.estimateArmRestPose();
+    this.currentPose = { ...this.currentPose, ...this.armRestPose };
     this.applyState({ type: "avatar_state", phase: this.phase, emotion: this.emotion });
   }
 
@@ -121,6 +219,36 @@ export class AvatarController {
       y: 0,
       z: 0
     });
+    this.applyBoneRotation(VRMHumanBoneName.LeftUpperArm, {
+      x: this.currentPose.leftUpperArmPitch,
+      y: this.currentPose.leftUpperArmYaw,
+      z: this.currentPose.leftUpperArmRoll
+    });
+    this.applyBoneRotation(VRMHumanBoneName.RightUpperArm, {
+      x: this.currentPose.rightUpperArmPitch,
+      y: this.currentPose.rightUpperArmYaw,
+      z: this.currentPose.rightUpperArmRoll
+    });
+    this.applyBoneRotation(VRMHumanBoneName.LeftLowerArm, {
+      x: this.currentPose.leftLowerArmPitch,
+      y: this.currentPose.leftLowerArmYaw,
+      z: this.currentPose.leftLowerArmRoll
+    });
+    this.applyBoneRotation(VRMHumanBoneName.RightLowerArm, {
+      x: this.currentPose.rightLowerArmPitch,
+      y: this.currentPose.rightLowerArmYaw,
+      z: this.currentPose.rightLowerArmRoll
+    });
+    this.applyBoneRotation(VRMHumanBoneName.LeftHand, {
+      x: this.currentPose.leftHandPitch,
+      y: this.currentPose.leftHandYaw,
+      z: this.currentPose.leftHandRoll
+    });
+    this.applyBoneRotation(VRMHumanBoneName.RightHand, {
+      x: this.currentPose.rightHandPitch,
+      y: this.currentPose.rightHandYaw,
+      z: this.currentPose.rightHandRoll
+    });
   }
 
   private getTargetPose(elapsed: number): MotionPose {
@@ -134,7 +262,7 @@ export class AvatarController {
 
     switch (this.phase) {
       case "listening":
-        return {
+        return this.withBasePose({
           headPitch: -0.035 + smallNod,
           headYaw: Math.sin(elapsed * 0.9) * 0.018,
           headRoll: 0,
@@ -142,9 +270,9 @@ export class AvatarController {
           chestPitch: -0.085 + breath,
           spinePitch: -0.035,
           mouthOpen: 0
-        };
+        });
       case "thinking":
-        return {
+        return this.withBasePose({
           headPitch: 0.025,
           headYaw: -0.055 + Math.sin(elapsed * 0.8) * 0.01,
           headRoll: 0.13,
@@ -152,9 +280,9 @@ export class AvatarController {
           chestPitch: breath * 0.5,
           spinePitch: 0,
           mouthOpen: 0
-        };
+        });
       case "speaking":
-        return {
+        return this.withBasePose({
           headPitch: smallNod,
           headYaw: Math.sin(elapsed * 1.6) * 0.02,
           headRoll: Math.sin(elapsed * 1.2) * 0.018,
@@ -162,9 +290,9 @@ export class AvatarController {
           chestPitch: -0.035 + breath,
           spinePitch: -0.012,
           mouthOpen: speechMouth
-        };
+        });
       case "error":
-        return {
+        return this.withBasePose({
           headPitch: 0.07,
           headYaw: 0,
           headRoll: -0.09,
@@ -172,10 +300,10 @@ export class AvatarController {
           chestPitch: 0.045 + breath * 0.4,
           spinePitch: 0.02,
           mouthOpen: 0
-        };
+        });
       case "idle":
       default:
-        return {
+        return this.withBasePose({
           headPitch: breath * 0.45,
           headYaw: Math.sin(elapsed * 0.45) * 0.012,
           headRoll: Math.sin(elapsed * 0.35) * 0.01,
@@ -183,8 +311,16 @@ export class AvatarController {
           chestPitch: breath,
           spinePitch: breath * 0.35,
           mouthOpen: 0
-        };
+        });
     }
+  }
+
+  private withBasePose(overrides: Partial<MotionPose>): MotionPose {
+    return {
+      ...ZERO_POSE,
+      ...this.armRestPose,
+      ...overrides
+    };
   }
 
   private applyPostureCue(basePose: MotionPose, elapsed: number): MotionPose {
@@ -196,17 +332,20 @@ export class AvatarController {
     const offset = this.getPosturePresetOffset(this.posture.preset, elapsed);
     const pose: MotionPose = { ...basePose };
 
-    pose.headPitch += (offset.headPitch ?? 0) * intensity;
-    pose.headYaw += (offset.headYaw ?? 0) * intensity;
-    pose.headRoll += (offset.headRoll ?? 0) * intensity;
-    pose.neckPitch += (offset.neckPitch ?? 0) * intensity;
-    pose.chestPitch += (offset.chestPitch ?? 0) * intensity;
-    pose.spinePitch += (offset.spinePitch ?? 0) * intensity;
+    for (const key of POSTURE_OFFSET_KEYS) {
+      pose[key] += (offset[key] ?? 0) * intensity;
+    }
 
     this.applyRotationCue(pose, "head", intensity);
     this.applyRotationCue(pose, "neck", intensity);
     this.applyRotationCue(pose, "chest", intensity);
     this.applyRotationCue(pose, "spine", intensity);
+    this.applyRotationCue(pose, "leftUpperArm", intensity);
+    this.applyRotationCue(pose, "rightUpperArm", intensity);
+    this.applyRotationCue(pose, "leftLowerArm", intensity);
+    this.applyRotationCue(pose, "rightLowerArm", intensity);
+    this.applyRotationCue(pose, "leftHand", intensity);
+    this.applyRotationCue(pose, "rightHand", intensity);
 
     return pose;
   }
@@ -223,18 +362,41 @@ export class AvatarController {
           spinePitch: 0
         };
       case "attentive":
-        return { headPitch: -0.035, neckPitch: -0.02, chestPitch: -0.075, spinePitch: -0.025 };
+        return {
+          headPitch: -0.035,
+          neckPitch: -0.02,
+          chestPitch: -0.075,
+          spinePitch: -0.025,
+          leftUpperArmPitch: -0.035,
+          rightUpperArmPitch: -0.035
+        };
       case "thinking":
-        return { headPitch: 0.025, headYaw: -0.035, headRoll: 0.12, chestPitch: 0.015 };
+        return {
+          headPitch: 0.025,
+          headYaw: -0.035,
+          headRoll: 0.12,
+          chestPitch: 0.015,
+          leftLowerArmPitch: 0.035,
+          rightLowerArmPitch: 0.035
+        };
       case "speaking":
         return {
           headPitch: Math.sin(elapsed * 2.2) * 0.018,
           headYaw: Math.sin(elapsed * 1.4) * 0.02,
           chestPitch: -0.035,
-          spinePitch: -0.012
+          spinePitch: -0.012,
+          leftUpperArmYaw: Math.sin(elapsed * 1.7) * 0.035,
+          rightUpperArmYaw: -Math.sin(elapsed * 1.7) * 0.035
         };
       case "bow":
-        return { headPitch: 0.1, neckPitch: 0.055, chestPitch: -0.2, spinePitch: -0.08 };
+        return {
+          headPitch: 0.1,
+          neckPitch: 0.055,
+          chestPitch: -0.2,
+          spinePitch: -0.08,
+          leftUpperArmPitch: 0.035,
+          rightUpperArmPitch: 0.035
+        };
       case "lean_forward":
         return { headPitch: -0.025, neckPitch: -0.02, chestPitch: -0.13, spinePitch: -0.05 };
       case "lean_back":
@@ -252,7 +414,7 @@ export class AvatarController {
     }
   }
 
-  private applyRotationCue(pose: MotionPose, target: "head" | "neck" | "chest" | "spine", intensity: number): void {
+  private applyRotationCue(pose: MotionPose, target: RotationCueTarget, intensity: number): void {
     const rotation = this.posture?.[target];
     if (!rotation) {
       return;
@@ -274,11 +436,89 @@ export class AvatarController {
       pose.chestPitch += pitch;
       pose.headYaw += yaw * 0.12;
       pose.headRoll += roll * 0.12;
-    } else {
+    } else if (target === "spine") {
       pose.spinePitch += pitch;
       pose.chestPitch += yaw * 0.08;
       pose.headRoll += roll * 0.08;
+    } else if (target === "leftUpperArm") {
+      pose.leftUpperArmPitch += pitch;
+      pose.leftUpperArmYaw += yaw;
+      pose.leftUpperArmRoll += roll;
+    } else if (target === "rightUpperArm") {
+      pose.rightUpperArmPitch += pitch;
+      pose.rightUpperArmYaw += yaw;
+      pose.rightUpperArmRoll += roll;
+    } else if (target === "leftLowerArm") {
+      pose.leftLowerArmPitch += pitch;
+      pose.leftLowerArmYaw += yaw;
+      pose.leftLowerArmRoll += roll;
+    } else if (target === "rightLowerArm") {
+      pose.rightLowerArmPitch += pitch;
+      pose.rightLowerArmYaw += yaw;
+      pose.rightLowerArmRoll += roll;
+    } else if (target === "leftHand") {
+      pose.leftHandPitch += pitch;
+      pose.leftHandYaw += yaw;
+      pose.leftHandRoll += roll;
+    } else {
+      pose.rightHandPitch += pitch;
+      pose.rightHandYaw += yaw;
+      pose.rightHandRoll += roll;
     }
+  }
+
+  private estimateArmRestPose(): ArmPose {
+    this.vrm?.scene.updateMatrixWorld(true);
+
+    const leftUpperArmRoll = this.estimateUpperArmDropRoll(
+      VRMHumanBoneName.LeftUpperArm,
+      VRMHumanBoneName.LeftLowerArm,
+      DEFAULT_ARM_REST_POSE.leftUpperArmRoll
+    );
+    const rightUpperArmRoll = this.estimateUpperArmDropRoll(
+      VRMHumanBoneName.RightUpperArm,
+      VRMHumanBoneName.RightLowerArm,
+      DEFAULT_ARM_REST_POSE.rightUpperArmRoll
+    );
+
+    return {
+      leftUpperArmPitch: 0,
+      leftUpperArmYaw: 0,
+      leftUpperArmRoll,
+      rightUpperArmPitch: 0,
+      rightUpperArmYaw: 0,
+      rightUpperArmRoll,
+      leftLowerArmPitch: DEFAULT_ARM_REST_POSE.leftLowerArmPitch,
+      leftLowerArmYaw: 0,
+      leftLowerArmRoll: leftUpperArmRoll * 0.12,
+      rightLowerArmPitch: DEFAULT_ARM_REST_POSE.rightLowerArmPitch,
+      rightLowerArmYaw: 0,
+      rightLowerArmRoll: rightUpperArmRoll * 0.12,
+      leftHandPitch: 0,
+      leftHandYaw: 0,
+      leftHandRoll: leftUpperArmRoll * 0.04,
+      rightHandPitch: 0,
+      rightHandYaw: 0,
+      rightHandRoll: rightUpperArmRoll * 0.04
+    };
+  }
+
+  private estimateUpperArmDropRoll(upperArmName: HumanBoneName, lowerArmName: HumanBoneName, fallback: number): number {
+    const upperArm = this.getBone(upperArmName);
+    const lowerArm = this.getBone(lowerArmName);
+    if (!upperArm || !lowerArm) {
+      return fallback;
+    }
+
+    upperArm.getWorldPosition(tempWorldPositionA);
+    lowerArm.getWorldPosition(tempWorldPositionB);
+    const armDirection = tempWorldPositionB.sub(tempWorldPositionA);
+    if (armDirection.lengthSq() < 0.000001) {
+      return fallback;
+    }
+
+    const targetRoll = Math.atan2(armDirection.x, -armDirection.y) * 0.72;
+    return MathUtils.clamp(targetRoll, -1.12, 1.12);
   }
 
   private updateBlink(delta: number, elapsed: number): void {

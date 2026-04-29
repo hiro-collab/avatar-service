@@ -164,6 +164,10 @@ h1 {
   display: none;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .empty-state__mark {
   display: grid;
   place-items: center;

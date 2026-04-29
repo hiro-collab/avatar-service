@@ -10,15 +10,51 @@ export type AvatarLoadStatus =
   | { status: "loaded"; message: string; fileName: string }
   | { status: "error"; message: string; fileName?: string };
 
+export type CameraProjection = "perspective" | "orthographic";
+
+export type AvatarViewSettings = {
+  projection: CameraProjection;
+  cameraDistance: number;
+  cameraFov: number;
+  orthographicWidth: number;
+  avatarHeight: number;
+  lightHeight: number;
+};
+
+export const DEFAULT_AVATAR_VIEW_SETTINGS: AvatarViewSettings = {
+  projection: "perspective",
+  cameraDistance: 3.1,
+  cameraFov: 28,
+  orthographicWidth: 2.1,
+  avatarHeight: 1.7,
+  lightHeight: 1.25
+};
+
+type AvatarMeasurement = {
+  centerX: number;
+  centerZ: number;
+  minY: number;
+  height: number;
+};
+
 export class AvatarRenderer {
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
+  private readonly perspectiveCamera = new THREE.PerspectiveCamera(DEFAULT_AVATAR_VIEW_SETTINGS.cameraFov, 1, 0.01, 100);
+  private readonly orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
   private readonly renderer: THREE.WebGLRenderer;
   private readonly controls: OrbitControls;
   private readonly clock = new THREE.Clock();
   private readonly loader = new GLTFLoader();
   private readonly resizeObserver: ResizeObserver;
+  private readonly keyLightTarget = new THREE.Object3D();
+  private readonly fillLightTarget = new THREE.Object3D();
+  private activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera = this.perspectiveCamera;
+  private keyLight: THREE.DirectionalLight | null = null;
+  private fillLight: THREE.DirectionalLight | null = null;
   private currentVrm: VRM | null = null;
+  private avatarMeasurement: AvatarMeasurement | null = null;
+  private viewSettings: AvatarViewSettings = { ...DEFAULT_AVATAR_VIEW_SETTINGS };
+  private viewportAspect = 1;
   private frameId = 0;
 
   constructor(
@@ -34,12 +70,11 @@ export class AvatarRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls = new OrbitControls(this.activeCamera, this.renderer.domElement);
     this.controls.enablePan = false;
     this.controls.enableDamping = true;
-    this.controls.minDistance = 1.8;
-    this.controls.maxDistance = 5.5;
-    this.controls.target.set(0, 1.25, 0);
+    this.controls.minDistance = 0.8;
+    this.controls.maxDistance = 9.5;
 
     this.loader.register((parser) => new VRMLoaderPlugin(parser));
 
@@ -84,6 +119,28 @@ export class AvatarRenderer {
     this.scene.background = new THREE.Color(color);
   }
 
+  setViewSettings(settings: Partial<AvatarViewSettings>): AvatarViewSettings {
+    const next = normalizeViewSettings({
+      ...this.viewSettings,
+      ...settings
+    });
+    const projectionChanged = next.projection !== this.viewSettings.projection;
+    this.viewSettings = next;
+
+    if (projectionChanged) {
+      this.setActiveProjection(next.projection);
+    }
+
+    this.applyAvatarLayout();
+    this.updateCamera();
+    this.updateLighting();
+    return this.getViewSettings();
+  }
+
+  getViewSettings(): AvatarViewSettings {
+    return { ...this.viewSettings };
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frameId);
     this.resizeObserver.disconnect();
@@ -99,11 +156,15 @@ export class AvatarRenderer {
     this.scene.add(hemiLight);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
-    keyLight.position.set(2.3, 4.2, 3.4);
+    keyLight.target = this.keyLightTarget;
+    this.keyLight = keyLight;
+    this.scene.add(this.keyLightTarget);
     this.scene.add(keyLight);
 
     const fillLight = new THREE.DirectionalLight(0xaec7ba, 1.2);
-    fillLight.position.set(-3, 2.5, 2);
+    fillLight.target = this.fillLightTarget;
+    this.fillLight = fillLight;
+    this.scene.add(this.fillLightTarget);
     this.scene.add(fillLight);
 
     const ground = new THREE.Mesh(
@@ -118,7 +179,8 @@ export class AvatarRenderer {
     grid.position.y = 0;
     this.scene.add(grid);
 
-    this.camera.position.set(0, 1.25, 3.1);
+    this.updateCamera();
+    this.updateLighting();
   }
 
   private async loadVRMSource(url: string): Promise<void> {
@@ -133,7 +195,9 @@ export class AvatarRenderer {
     VRMUtils.rotateVRM0(vrm);
 
     this.setCurrentVRM(vrm);
-    this.frameCamera(vrm);
+    this.measureCurrentAvatar();
+    this.applyAvatarLayout();
+    this.updateCamera();
   }
 
   private setCurrentVRM(vrm: VRM | null): void {
@@ -142,34 +206,113 @@ export class AvatarRenderer {
       this.disposeObject(this.currentVrm.scene);
     }
 
-    this.currentVrm = vrm;
-    this.controller.setVRM(vrm);
-
     if (vrm) {
+      vrm.scene.scale.setScalar(1);
       vrm.scene.position.set(0, 0, 0);
       vrm.scene.rotation.y = Math.PI;
       if (vrm.lookAt) {
-        vrm.lookAt.target = this.camera;
+        vrm.lookAt.target = this.activeCamera;
       }
       this.scene.add(vrm.scene);
     }
+
+    this.currentVrm = vrm;
+    this.avatarMeasurement = null;
+    this.controller.setVRM(vrm);
   }
 
-  private frameCamera(vrm: VRM): void {
-    const box = new THREE.Box3().setFromObject(vrm.scene);
+  private measureCurrentAvatar(): void {
+    if (!this.currentVrm) {
+      this.avatarMeasurement = null;
+      return;
+    }
+
+    const avatar = this.currentVrm.scene;
+    avatar.scale.setScalar(1);
+    avatar.position.set(0, 0, 0);
+    avatar.updateMatrixWorld(true);
+
+    const box = new THREE.Box3().setFromObject(avatar);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const height = Math.max(size.y, 1.35);
 
-    vrm.scene.position.x -= center.x;
-    vrm.scene.position.z -= center.z;
-    vrm.scene.position.y -= box.min.y;
+    this.avatarMeasurement = {
+      centerX: center.x,
+      centerZ: center.z,
+      minY: box.min.y,
+      height: Math.max(size.y, 0.01)
+    };
+  }
 
-    const targetHeight = THREE.MathUtils.clamp(height * 0.68, 1.0, 1.55);
-    this.controls.target.set(0, targetHeight, 0);
-    this.camera.position.set(0, targetHeight + 0.05, THREE.MathUtils.clamp(height * 1.7, 2.3, 4.2));
-    this.camera.lookAt(this.controls.target);
+  private applyAvatarLayout(): void {
+    if (!this.currentVrm || !this.avatarMeasurement) {
+      return;
+    }
+
+    const scale = this.viewSettings.avatarHeight / this.avatarMeasurement.height;
+    this.currentVrm.scene.scale.setScalar(scale);
+    this.currentVrm.scene.position.set(
+      -this.avatarMeasurement.centerX * scale,
+      -this.avatarMeasurement.minY * scale,
+      -this.avatarMeasurement.centerZ * scale
+    );
+    this.currentVrm.scene.updateMatrixWorld(true);
+  }
+
+  private setActiveProjection(projection: CameraProjection): void {
+    const previousCamera = this.activeCamera;
+    this.activeCamera = projection === "orthographic" ? this.orthographicCamera : this.perspectiveCamera;
+    this.activeCamera.position.copy(previousCamera.position);
+    this.activeCamera.quaternion.copy(previousCamera.quaternion);
+    this.controls.object = this.activeCamera;
+
+    if (this.currentVrm?.lookAt) {
+      this.currentVrm.lookAt.target = this.activeCamera;
+    }
+  }
+
+  private updateCamera(): void {
+    const targetHeight = THREE.MathUtils.clamp(this.viewSettings.avatarHeight * 0.68, 0.35, 2.2);
+    const nextTarget = new THREE.Vector3(0, targetHeight, 0);
+    const direction = this.activeCamera.position.clone().sub(this.controls.target);
+
+    if (direction.lengthSq() < 0.000001) {
+      direction.set(0, 0.04, 1);
+    }
+
+    direction.normalize().multiplyScalar(this.viewSettings.cameraDistance);
+    this.controls.target.copy(nextTarget);
+    this.activeCamera.position.copy(nextTarget).add(direction);
+    this.activeCamera.lookAt(this.controls.target);
+    this.updateProjection();
     this.controls.update();
+  }
+
+  private updateProjection(): void {
+    this.perspectiveCamera.aspect = this.viewportAspect;
+    this.perspectiveCamera.fov = this.viewSettings.cameraFov;
+    this.perspectiveCamera.updateProjectionMatrix();
+
+    const halfWidth = this.viewSettings.orthographicWidth / 2;
+    const halfHeight = halfWidth / this.viewportAspect;
+    this.orthographicCamera.left = -halfWidth;
+    this.orthographicCamera.right = halfWidth;
+    this.orthographicCamera.top = halfHeight;
+    this.orthographicCamera.bottom = -halfHeight;
+    this.orthographicCamera.updateProjectionMatrix();
+  }
+
+  private updateLighting(): void {
+    const lightHeight = this.viewSettings.lightHeight;
+    this.keyLightTarget.position.set(0, lightHeight, 0);
+    this.fillLightTarget.position.set(0, lightHeight, 0);
+
+    if (this.keyLight) {
+      this.keyLight.position.set(2.3, lightHeight + 2.95, 3.4);
+    }
+    if (this.fillLight) {
+      this.fillLight.position.set(-3, lightHeight + 1.35, 2);
+    }
   }
 
   private animate = (): void => {
@@ -179,7 +322,7 @@ export class AvatarRenderer {
 
     this.controller.update(delta, elapsed);
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.activeCamera);
   };
 
   private resize(): void {
@@ -187,8 +330,8 @@ export class AvatarRenderer {
     const width = Math.max(1, Math.floor(rect.width));
     const height = Math.max(1, Math.floor(rect.height));
 
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    this.viewportAspect = width / height;
+    this.updateProjection();
     this.renderer.setSize(width, height, false);
   }
 
@@ -219,4 +362,15 @@ function urlLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function normalizeViewSettings(settings: AvatarViewSettings): AvatarViewSettings {
+  return {
+    projection: settings.projection === "orthographic" ? "orthographic" : "perspective",
+    cameraDistance: THREE.MathUtils.clamp(settings.cameraDistance, 0.8, 9.5),
+    cameraFov: THREE.MathUtils.clamp(settings.cameraFov, 12, 70),
+    orthographicWidth: THREE.MathUtils.clamp(settings.orthographicWidth, 0.8, 4.8),
+    avatarHeight: THREE.MathUtils.clamp(settings.avatarHeight, 0.6, 2.6),
+    lightHeight: THREE.MathUtils.clamp(settings.lightHeight, 0.2, 2.6)
+  };
 }

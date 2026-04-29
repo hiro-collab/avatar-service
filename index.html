@@ -50,6 +50,46 @@
             <p id="background-detail" class="subtle">#f3f4f1</p>
           </section>
 
+          <section class="control-section form-grid">
+            <div class="section-heading">
+              <h2>View</h2>
+              <span id="view-settings-readout">perspective</span>
+            </div>
+
+            <label>
+              <span>Camera Projection</span>
+              <select id="camera-projection-select">
+                <option value="perspective">perspective</option>
+                <option value="orthographic">orthographic</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Camera Distance <output id="camera-distance-readout">3.10</output></span>
+              <input id="camera-distance-input" type="range" min="0.8" max="9.5" step="0.05" value="3.1" />
+            </label>
+
+            <label id="camera-fov-label">
+              <span>Perspective FOV <output id="camera-fov-readout">28 deg</output></span>
+              <input id="camera-fov-input" type="range" min="12" max="70" step="1" value="28" />
+            </label>
+
+            <label id="ortho-width-label" class="is-hidden">
+              <span>Ortho Screen Width <output id="ortho-width-readout">2.10</output></span>
+              <input id="ortho-width-input" type="range" min="0.8" max="4.8" step="0.05" value="2.1" />
+            </label>
+
+            <label>
+              <span>Avatar Height <output id="avatar-height-readout">1.70</output></span>
+              <input id="avatar-height-input" type="range" min="0.6" max="2.6" step="0.01" value="1.7" />
+            </label>
+
+            <label>
+              <span>Light Hit Height <output id="light-height-readout">1.25</output></span>
+              <input id="light-height-input" type="range" min="0.2" max="2.6" step="0.01" value="1.25" />
+            </label>
+          </section>
+
           <section class="control-section">
             <div class="section-heading">
               <h2>Phase</h2>

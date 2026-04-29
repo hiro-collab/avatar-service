@@ -42,6 +42,12 @@ export type AvatarPostureCue = {
   neck?: AvatarRotationCue;
   chest?: AvatarRotationCue;
   spine?: AvatarRotationCue;
+  leftUpperArm?: AvatarRotationCue;
+  rightUpperArm?: AvatarRotationCue;
+  leftLowerArm?: AvatarRotationCue;
+  rightLowerArm?: AvatarRotationCue;
+  leftHand?: AvatarRotationCue;
+  rightHand?: AvatarRotationCue;
   source?: string;
   timestamp?: number;
 };

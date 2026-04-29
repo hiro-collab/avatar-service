@@ -166,7 +166,18 @@ function toAvatarPostureCue(value: unknown): AvatarPostureCue | null {
     cue.intensity = payload.intensity;
   }
 
-  for (const key of ["head", "neck", "chest", "spine"] as const) {
+  for (const key of [
+    "head",
+    "neck",
+    "chest",
+    "spine",
+    "leftUpperArm",
+    "rightUpperArm",
+    "leftLowerArm",
+    "rightLowerArm",
+    "leftHand",
+    "rightHand"
+  ] as const) {
     const rotation = toAvatarRotationCue(payload[key]);
     if (rotation) {
       cue[key] = rotation;
