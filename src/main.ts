@@ -16,6 +16,8 @@ const canvas = getElement<HTMLCanvasElement>("avatar-canvas");
 const fileInput = getElement<HTMLInputElement>("vrm-input");
 const modelUrlInput = getElement<HTMLInputElement>("model-url-input");
 const loadModelUrlButton = getElement<HTMLButtonElement>("load-model-url-button");
+const backgroundColorInput = getElement<HTMLInputElement>("background-color-input");
+const backgroundDetail = getElement<HTMLElement>("background-detail");
 const modelName = getElement<HTMLElement>("model-name");
 const runtimeStatus = getElement<HTMLElement>("runtime-status");
 const sseGlobalStatus = getElement<HTMLElement>("sse-global-status");
@@ -48,6 +50,7 @@ const swordAdapter = new SwordVoiceAgentAdapter();
 const stateResolver = new AvatarStateResolver({ preferTtsSpeaking: preferTtsInput.checked });
 let sseConnector: SseConnector | null = null;
 const removePostMessageBridge = installPostMessageAvatarBridge();
+const removeConfigBridge = installAvatarConfigBridge();
 const unsubscribeState = subscribeAvatarState((event) => {
   controller.applyState(event);
   phaseReadout.textContent = event.phase;
@@ -109,8 +112,13 @@ preferTtsInput.addEventListener("change", () => {
 window.addEventListener("beforeunload", () => {
   unsubscribeState();
   removePostMessageBridge();
+  removeConfigBridge();
   sseConnector?.stop();
   renderer.dispose();
+});
+
+backgroundColorInput.addEventListener("input", () => {
+  applyBackgroundColor(backgroundColorInput.value);
 });
 
 if (eventsUrlInput.value.trim()) {
@@ -269,6 +277,7 @@ function updateSseDetail(message: string): void {
 function hydrateSettingsFromUrl(): void {
   const params = new URLSearchParams(window.location.search);
   modelUrlInput.value = params.get("model") ?? "";
+  applyBackgroundColor(params.get("background") ?? params.get("bg") ?? backgroundColorInput.value);
   eventsUrlInput.value = params.get("events") ?? "";
   eventsTokenInput.value = params.get("events_token") ?? params.get("token") ?? "";
 }
@@ -303,6 +312,53 @@ function redactAvatarEvent(event: unknown): unknown {
     preview.text = `[redacted:${preview.text.length}]`;
   }
   return preview;
+}
+
+function installAvatarConfigBridge(): () => void {
+  const handler = (messageEvent: MessageEvent) => {
+    const data = messageEvent.data;
+    if (!data || typeof data !== "object") {
+      return;
+    }
+
+    const payload = data as { type?: unknown; background?: unknown; background_color?: unknown };
+    if (payload.type !== "avatar_config") {
+      return;
+    }
+
+    const background = typeof payload.background === "string" ? payload.background : payload.background_color;
+    if (typeof background === "string") {
+      applyBackgroundColor(background);
+    }
+  };
+
+  window.addEventListener("message", handler);
+  return () => window.removeEventListener("message", handler);
+}
+
+function applyBackgroundColor(value: string): void {
+  const color = normalizeHexColor(value);
+  if (!color) {
+    backgroundDetail.textContent = `Invalid color: ${value}`;
+    return;
+  }
+
+  renderer.setBackgroundColor(color);
+  document.documentElement.style.setProperty("--avatar-stage-bg", color);
+  backgroundColorInput.value = color;
+  backgroundDetail.textContent = color;
+}
+
+function normalizeHexColor(value: string): string | null {
+  const color = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return color.toLowerCase();
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(color)) {
+    const [, r, g, b] = color;
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
 }
 
 function formatTurn(turnId: string | undefined): string {

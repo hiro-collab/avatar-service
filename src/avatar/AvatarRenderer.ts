@@ -80,6 +80,10 @@ export class AvatarRenderer {
     }
   }
 
+  setBackgroundColor(color: string): void {
+    this.scene.background = new THREE.Color(color);
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frameId);
     this.resizeObserver.disconnect();
@@ -89,7 +93,7 @@ export class AvatarRenderer {
   }
 
   private setupScene(): void {
-    this.scene.background = new THREE.Color(0xf3f4f1);
+    this.setBackgroundColor("#f3f4f1");
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x667064, 2.2);
     this.scene.add(hemiLight);

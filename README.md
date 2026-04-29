@@ -97,6 +97,12 @@ runtime status fileには `module`、`pid`、`parent_pid`、`started_at`、`host
 http://127.0.0.1:5173/?model=/models/default.vrm
 ```
 
+背景色は `background` または `bg` パラメータで指定できます。
+
+```text
+http://127.0.0.1:5173/?model=/models/default.vrm&background=%23f3f4f1
+```
+
 `.vrm/` はローカル検証用、`public/models/*.vrm` は配信用検証モデル用として `.gitignore` しています。ライセンスが明確なVRMだけを必要に応じて明示的に追加してください。
 
 ## ビルド
@@ -125,6 +131,18 @@ window.postMessage(
     },
     text: "外部エージェントからの発話です。",
     timestamp: Date.now()
+  },
+  "*"
+);
+```
+
+背景色は `avatar_config` messageでも変更できます。
+
+```js
+window.postMessage(
+  {
+    type: "avatar_config",
+    background: "#0f172a"
   },
   "*"
 );
