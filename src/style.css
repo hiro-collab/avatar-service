@@ -187,6 +187,20 @@ h2 {
   font-weight: 750;
 }
 
+.section-heading span[data-state="connected"] {
+  color: #28705a;
+}
+
+.section-heading span[data-state="connecting"],
+.section-heading span[data-state="stale"] {
+  color: #93621e;
+}
+
+.section-heading span[data-state="auth_error"],
+.section-heading span[data-state="disconnected"] {
+  color: #9a3728;
+}
+
 .subtle {
   margin: 10px 0 0;
   color: #647168;
@@ -260,6 +274,19 @@ h2 {
   font-weight: 750;
 }
 
+.form-grid .check-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 9px;
+}
+
+.check-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #28705a;
+}
+
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
@@ -288,6 +315,23 @@ h2 {
   border-color: #27735b;
   background: #28705a;
   color: #ffffff;
+}
+
+.secondary-button {
+  min-height: 40px;
+  border: 1px solid #cbd5cc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #26312b;
+  font-size: 13px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.inline-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .event-preview {

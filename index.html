@@ -83,6 +83,35 @@
             <button id="dispatch-button" type="button" class="primary-button">Dispatch state</button>
             <pre id="event-preview" class="event-preview" aria-label="Last avatar state event"></pre>
           </section>
+
+          <section class="control-section form-grid">
+            <div class="section-heading">
+              <h2>SSE Events</h2>
+              <span id="sse-status" data-state="disconnected">disconnected</span>
+            </div>
+
+            <label>
+              <span>Events URL</span>
+              <input id="events-url-input" type="url" placeholder="http://127.0.0.1:8790/api/events" />
+            </label>
+
+            <label>
+              <span>Token</span>
+              <input id="events-token-input" type="password" placeholder="optional bearer token" autocomplete="off" />
+            </label>
+
+            <label class="check-row">
+              <input id="prefer-tts-input" type="checkbox" checked />
+              <span>Prefer TTS state for speaking</span>
+            </label>
+
+            <div class="inline-actions">
+              <button id="connect-events-button" type="button" class="primary-button">Connect</button>
+              <button id="disconnect-events-button" type="button" class="secondary-button">Disconnect</button>
+            </div>
+
+            <p id="sse-detail" class="subtle">No SSE source configured.</p>
+          </section>
         </aside>
       </main>
     </div>

@@ -1,17 +1,17 @@
 # Avatar Service
 
-Independent Three.js + VRM avatar runtime for AI agent frontends.
+AIエージェントのフロントエンドに組み込むための、独立した Three.js + VRM アバターランタイムです。
 
 ## MVP
 
-- Load a local `.vrm` file from the browser.
-- Render the model with camera, lighting, orbit controls, and resize handling.
-- Dispatch `avatar_state` events from the debug UI.
-- React to `idle`, `listening`, `thinking`, `speaking`, and `error`.
-- Provide a typed event contract that can be reused by Dify, WebSocket, HTTP, or a future Unity runtime.
-- Accept `window.postMessage({ type: "avatar_state", phase: "speaking" }, "*")` as a first integration path.
+- ブラウザからローカルの `.vrm` ファイルを読み込む。
+- カメラ、ライト、OrbitControls、リサイズ対応付きでVRMモデルを描画する。
+- デバッグUIから `avatar_state` イベントをdispatchする。
+- `idle`、`listening`、`thinking`、`speaking`、`error` の各状態に反応する。
+- Dify、WebSocket、HTTP、将来のUnity版ランタイムでも再利用できる型付きイベント契約を提供する。
+- 最初の外部連携経路として `window.postMessage({ type: "avatar_state", phase: "speaking" }, "*")` を受け付ける。
 
-## Event Contract
+## イベント契約
 
 ```ts
 type AvatarPhase = "idle" | "listening" | "thinking" | "speaking" | "error";
@@ -28,16 +28,16 @@ type AvatarStateEvent = {
 };
 ```
 
-## Run
+## 起動
 
 ```bash
 npm install
 npm run dev
 ```
 
-Then open the Vite URL, usually `http://127.0.0.1:5173/`.
+起動後、Viteが表示するURLをブラウザで開きます。通常は `http://127.0.0.1:5173/` です。
 
-For agent or automation checks, use the detached helper so the command exits after a bounded readiness check:
+Codexや自動確認で使う場合は、一定時間内にreadiness checkを終えてコマンドが戻るdetached helperを使えます。
 
 ```bash
 npm run dev:detached
@@ -45,15 +45,15 @@ npm run dev:status
 npm run dev:stop
 ```
 
-The detached helper starts at port `5173` and automatically tries the next available port if that port is already occupied.
+detached helperは `5173` から起動を試し、ポートが埋まっている場合は次の空きポートを自動で使います。
 
-## Build
+## ビルド
 
 ```bash
 npm run build
 ```
 
-## Browser Integration Example
+## ブラウザ連携例
 
 ```js
 window.postMessage(
@@ -61,9 +61,27 @@ window.postMessage(
     type: "avatar_state",
     phase: "speaking",
     emotion: "happy",
-    text: "Hello from an external agent.",
+    text: "外部エージェントからの発話です。",
     timestamp: Date.now()
   },
   "*"
 );
 ```
+
+## SSE連携
+
+`sword-voice-agent` の `/api/events` を直接購読する場合は、起動URLに `events` パラメータを付けます。
+
+```text
+http://127.0.0.1:5173/?events=http://127.0.0.1:8790/api/events
+```
+
+認証が必要な場合は画面のToken欄に入力します。URLから渡す場合は `events_token` も利用できます。
+
+```text
+http://127.0.0.1:5173/?events=http://127.0.0.1:8790/api/events&events_token=YOUR_TOKEN
+```
+
+SSEイベントは `SwordVoiceAgentAdapter` で `avatar_state` に変換されます。`postMessage` 連携は引き続き利用できます。
+
+ブラウザから別ポートのSSEを直接読む場合、接続先サーバー側でCORS許可が必要です。
