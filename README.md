@@ -45,17 +45,26 @@ npm install
 npm run dev
 ```
 
-起動後、Viteが表示するURLをブラウザで開きます。通常は `http://127.0.0.1:5173/` です。
+起動後、Viteが表示するURLをブラウザで開きます。通常は `http://127.0.0.1:5173/` です。`npm run dev` は `scripts/dev-server.mjs` を経由し、strict portで起動します。指定portが使用中の場合、別portへ自動退避せずエラー終了します。
 
 Codexや自動確認で使う場合は、一定時間内にreadiness checkを終えてコマンドが戻るdetached helperを使えます。
 
 ```bash
 npm run dev:detached
 npm run dev:status
+npm run dev:health
 npm run dev:stop
 ```
 
-detached helperは `5173` から起動を試し、ポートが埋まっている場合は次の空きポートを自動で使います。
+`dev:stop` はruntime status fileに記録されたPIDだけを停止します。runtime status fileの既定値は `.dev-server.json` です。統合スクリプトなどから引数付きで呼ぶ場合は、npmの引数転送差異を避けるため `node` で直接呼び出してください。
+
+```bash
+node scripts/dev-server.mjs start --port 5173 --runtime-status-file C:\tmp\avatar-runtime-status.json
+node scripts/dev-server.mjs health --runtime-status-file C:\tmp\avatar-runtime-status.json
+node scripts/dev-server.mjs stop --runtime-status-file C:\tmp\avatar-runtime-status.json
+```
+
+runtime status fileには `module`、`pid`、`parent_pid`、`started_at`、`host`、`port`、`health_url`、`shutdown_command`、`command_line`、`state` が書かれます。正常停止時は削除せず `state: "stopped"` に更新します。
 
 ## モデル配置
 
@@ -71,6 +80,12 @@ http://127.0.0.1:5173/?model=/models/default.vrm
 
 ```bash
 npm run build
+```
+
+dev serverラッパーのsmoke test:
+
+```bash
+npm run test:dev-server
 ```
 
 ## ブラウザ連携例
