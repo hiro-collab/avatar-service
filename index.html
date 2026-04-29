@@ -12,16 +12,19 @@
           <p class="kicker">Three.js VRM runtime</p>
           <h1>Avatar Service</h1>
         </div>
-        <div id="runtime-status" class="runtime-status" aria-live="polite">Ready</div>
+        <div class="status-strip" aria-live="polite">
+          <div id="runtime-status" class="runtime-status">No model</div>
+          <div id="sse-global-status" class="status-pill" data-state="disconnected">SSE disconnected</div>
+        </div>
       </header>
 
       <main class="workspace">
         <section class="stage-shell" aria-label="Avatar stage">
           <canvas id="avatar-canvas"></canvas>
-          <div id="empty-state" class="empty-state">
-            <span class="empty-state__mark">VRM</span>
-            <strong>No model loaded</strong>
-            <span>Select a local .vrm file to start.</span>
+          <div id="empty-state" class="empty-state" data-status="idle">
+            <span id="empty-state-mark" class="empty-state__mark">VRM</span>
+            <strong id="empty-state-title">No model loaded</strong>
+            <span id="empty-state-message">Select a local .vrm file or load a model URL to start.</span>
           </div>
         </section>
 
@@ -31,6 +34,11 @@
               <span>Load VRM</span>
               <input id="vrm-input" type="file" accept=".vrm,model/gltf-binary" />
             </label>
+            <label class="file-loader model-url-loader">
+              <span>Model URL</span>
+              <input id="model-url-input" type="url" placeholder="/models/default.vrm" />
+            </label>
+            <button id="load-model-url-button" type="button" class="secondary-button">Load URL</button>
             <p id="model-name" class="subtle">Waiting for local model</p>
           </section>
 

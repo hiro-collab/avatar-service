@@ -4,12 +4,23 @@ export type AvatarPhase = (typeof AVATAR_PHASES)[number];
 export const AVATAR_EMOTIONS = ["neutral", "happy", "serious", "surprised", "troubled"] as const;
 export type AvatarEmotion = (typeof AVATAR_EMOTIONS)[number];
 
+export type AvatarSpeechCue = {
+  state?: "idle" | "preparing" | "speaking" | "completed" | "error" | string;
+  volume?: number;
+  rms?: number;
+  viseme?: string;
+  phoneme?: string;
+  source?: string;
+  timestamp?: number;
+};
+
 export type AvatarStateEvent = {
   type: "avatar_state";
   turn_id?: string;
   phase: AvatarPhase;
   emotion?: AvatarEmotion;
   gesture?: "sword_sign" | "none" | string;
+  speech?: AvatarSpeechCue;
   text?: string;
   timestamp?: number;
 };

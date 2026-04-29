@@ -5,6 +5,7 @@ AIエージェントのフロントエンドに組み込むための、独立し
 ## MVP
 
 - ブラウザからローカルの `.vrm` ファイルを読み込む。
+- `?model=/models/default.vrm` のようなURLパラメータでVRMを自動読み込みする。
 - カメラ、ライト、OrbitControls、リサイズ対応付きでVRMモデルを描画する。
 - デバッグUIから `avatar_state` イベントをdispatchする。
 - `idle`、`listening`、`thinking`、`speaking`、`error` の各状態に反応する。
@@ -23,6 +24,15 @@ type AvatarStateEvent = {
   phase: AvatarPhase;
   emotion?: AvatarEmotion;
   gesture?: "sword_sign" | "none" | string;
+  speech?: {
+    state?: "idle" | "preparing" | "speaking" | "completed" | "error" | string;
+    volume?: number;
+    rms?: number;
+    viseme?: string;
+    phoneme?: string;
+    source?: string;
+    timestamp?: number;
+  };
   text?: string;
   timestamp?: number;
 };
@@ -46,6 +56,16 @@ npm run dev:stop
 ```
 
 detached helperは `5173` から起動を試し、ポートが埋まっている場合は次の空きポートを自動で使います。
+
+## モデル配置
+
+検証用VRMは `public/models/` に配置します。たとえば `public/models/default.vrm` を置くと、次のURLで自動読み込みできます。
+
+```text
+http://127.0.0.1:5173/?model=/models/default.vrm
+```
+
+`.vrm/` はローカル検証用、`public/models/*.vrm` は配信用検証モデル用として `.gitignore` しています。ライセンスが明確なVRMだけを必要に応じて明示的に追加してください。
 
 ## ビルド
 
@@ -85,3 +105,5 @@ http://127.0.0.1:5173/?events=http://127.0.0.1:8790/api/events&events_token=YOUR
 SSEイベントは `SwordVoiceAgentAdapter` で `avatar_state` に変換されます。`postMessage` 連携は引き続き利用できます。
 
 ブラウザから別ポートのSSEを直接読む場合、接続先サーバー側でCORS許可が必要です。
+
+`tts.state` の `speaking`、`completed`、`error` はTTS優先で解決されます。将来の音量同期やviseme連携に備えて、`speech.volume`、`speech.rms`、`speech.viseme`、`speech.phoneme` を任意フィールドとして受け取れます。

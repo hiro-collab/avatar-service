@@ -1,4 +1,11 @@
-import { type AvatarEmotion, type AvatarPhase, type AvatarStateEvent, isAvatarEmotion, isAvatarPhase } from "./types";
+import {
+  type AvatarEmotion,
+  type AvatarPhase,
+  type AvatarSpeechCue,
+  type AvatarStateEvent,
+  isAvatarEmotion,
+  isAvatarPhase
+} from "./types";
 
 export const AVATAR_STATE_EVENT = "avatar_state";
 
@@ -8,6 +15,7 @@ type AvatarStatePayload = {
   phase?: unknown;
   emotion?: unknown;
   gesture?: unknown;
+  speech?: unknown;
   text?: unknown;
   timestamp?: unknown;
 };
@@ -39,6 +47,11 @@ export function toAvatarStateEvent(value: unknown): AvatarStateEvent | null {
     event.gesture = payload.gesture;
   }
 
+  const speech = toAvatarSpeechCue(payload.speech);
+  if (speech) {
+    event.speech = speech;
+  }
+
   if (typeof payload.text === "string" && payload.text.length > 0) {
     event.text = payload.text;
   }
@@ -54,6 +67,7 @@ export function createAvatarStateEvent(input: {
   phase: AvatarPhase;
   emotion?: AvatarEmotion;
   gesture?: string;
+  speech?: AvatarSpeechCue;
   turn_id?: string;
   text?: string;
 }): AvatarStateEvent {
@@ -62,6 +76,7 @@ export function createAvatarStateEvent(input: {
     phase: input.phase,
     emotion: input.emotion,
     gesture: input.gesture,
+    speech: input.speech,
     turn_id: input.turn_id,
     text: input.text,
     timestamp: Date.now()
@@ -100,4 +115,27 @@ export function installPostMessageAvatarBridge(): () => void {
 
   window.addEventListener("message", handler);
   return () => window.removeEventListener("message", handler);
+}
+
+function toAvatarSpeechCue(value: unknown): AvatarSpeechCue | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const cue: AvatarSpeechCue = {};
+
+  for (const key of ["state", "viseme", "phoneme", "source"] as const) {
+    if (typeof payload[key] === "string" && payload[key].length > 0) {
+      cue[key] = payload[key];
+    }
+  }
+
+  for (const key of ["volume", "rms", "timestamp"] as const) {
+    if (typeof payload[key] === "number" && Number.isFinite(payload[key])) {
+      cue[key] = payload[key];
+    }
+  }
+
+  return Object.keys(cue).length > 0 ? cue : null;
 }

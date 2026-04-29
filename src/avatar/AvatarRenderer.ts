@@ -55,18 +55,7 @@ export class AvatarRenderer {
     const fileUrl = URL.createObjectURL(file);
 
     try {
-      const gltf = await this.loader.loadAsync(fileUrl);
-      const vrm = gltf.userData.vrm as VRM | undefined;
-      if (!vrm) {
-        throw new Error("The selected file did not contain VRM data.");
-      }
-
-      VRMUtils.removeUnnecessaryVertices(vrm.scene);
-      VRMUtils.removeUnnecessaryJoints(vrm.scene);
-      VRMUtils.rotateVRM0(vrm);
-
-      this.setCurrentVRM(vrm);
-      this.frameCamera(vrm);
+      await this.loadVRMSource(fileUrl);
       this.onStatus({ status: "loaded", message: "Model loaded", fileName: file.name });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load model";
@@ -74,6 +63,20 @@ export class AvatarRenderer {
       throw error;
     } finally {
       URL.revokeObjectURL(fileUrl);
+    }
+  }
+
+  async loadVRMUrl(url: string): Promise<void> {
+    const label = urlLabel(url);
+    this.onStatus({ status: "loading", message: "Loading model", fileName: label });
+
+    try {
+      await this.loadVRMSource(url);
+      this.onStatus({ status: "loaded", message: "Model loaded", fileName: label });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load model";
+      this.onStatus({ status: "error", message, fileName: label });
+      throw error;
     }
   }
 
@@ -112,6 +115,21 @@ export class AvatarRenderer {
     this.scene.add(grid);
 
     this.camera.position.set(0, 1.25, 3.1);
+  }
+
+  private async loadVRMSource(url: string): Promise<void> {
+    const gltf = await this.loader.loadAsync(url);
+    const vrm = gltf.userData.vrm as VRM | undefined;
+    if (!vrm) {
+      throw new Error("The selected file did not contain VRM data.");
+    }
+
+    VRMUtils.removeUnnecessaryVertices(vrm.scene);
+    VRMUtils.removeUnnecessaryJoints(vrm.scene);
+    VRMUtils.rotateVRM0(vrm);
+
+    this.setCurrentVRM(vrm);
+    this.frameCamera(vrm);
   }
 
   private setCurrentVRM(vrm: VRM | null): void {
@@ -187,5 +205,14 @@ export class AvatarRenderer {
         item.dispose();
       }
     });
+  }
+}
+
+function urlLabel(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.pathname.split("/").filter(Boolean).pop() || parsed.href;
+  } catch {
+    return url;
   }
 }

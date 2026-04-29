@@ -14,8 +14,11 @@ import { SwordVoiceAgentAdapter } from "./integrations/swordVoiceAgent";
 
 const canvas = getElement<HTMLCanvasElement>("avatar-canvas");
 const fileInput = getElement<HTMLInputElement>("vrm-input");
+const modelUrlInput = getElement<HTMLInputElement>("model-url-input");
+const loadModelUrlButton = getElement<HTMLButtonElement>("load-model-url-button");
 const modelName = getElement<HTMLElement>("model-name");
 const runtimeStatus = getElement<HTMLElement>("runtime-status");
+const sseGlobalStatus = getElement<HTMLElement>("sse-global-status");
 const phaseReadout = getElement<HTMLElement>("phase-readout");
 const phaseButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-phase]"));
 const emotionSelect = getElement<HTMLSelectElement>("emotion-select");
@@ -25,6 +28,9 @@ const textInput = getElement<HTMLTextAreaElement>("text-input");
 const dispatchButton = getElement<HTMLButtonElement>("dispatch-button");
 const eventPreview = getElement<HTMLPreElement>("event-preview");
 const emptyState = getElement<HTMLElement>("empty-state");
+const emptyStateMark = getElement<HTMLElement>("empty-state-mark");
+const emptyStateTitle = getElement<HTMLElement>("empty-state-title");
+const emptyStateMessage = getElement<HTMLElement>("empty-state-message");
 const eventsUrlInput = getElement<HTMLInputElement>("events-url-input");
 const eventsTokenInput = getElement<HTMLInputElement>("events-token-input");
 const preferTtsInput = getElement<HTMLInputElement>("prefer-tts-input");
@@ -49,7 +55,7 @@ const unsubscribeState = subscribeAvatarState((event) => {
   eventPreview.textContent = JSON.stringify(redactAvatarEvent(event), null, 2);
 });
 
-hydrateSseSettingsFromUrl();
+hydrateSettingsFromUrl();
 dispatchManualState("idle");
 
 fileInput.addEventListener("change", async () => {
@@ -63,6 +69,10 @@ fileInput.addEventListener("change", async () => {
   } catch (error) {
     console.error(error);
   }
+});
+
+loadModelUrlButton.addEventListener("click", () => {
+  void loadModelFromUrl(modelUrlInput.value);
 });
 
 for (const button of phaseButtons) {
@@ -95,6 +105,10 @@ if (eventsUrlInput.value.trim()) {
   connectSse();
 }
 
+if (modelUrlInput.value.trim()) {
+  void loadModelFromUrl(modelUrlInput.value);
+}
+
 function dispatchManualState(phase: AvatarPhase): void {
   const event = createAvatarStateEvent({
     phase,
@@ -109,6 +123,7 @@ function dispatchManualState(phase: AvatarPhase): void {
 function updateLoadStatus(status: AvatarLoadStatus): void {
   runtimeStatus.dataset.status = status.status;
   runtimeStatus.textContent = status.message;
+  emptyState.dataset.status = status.status;
 
   if (status.status === "loaded" || status.status === "loading") {
     modelName.textContent = status.fileName;
@@ -118,7 +133,21 @@ function updateLoadStatus(status: AvatarLoadStatus): void {
     modelName.textContent = status.fileName ? `${status.fileName}: ${status.message}` : status.message;
   }
 
-  emptyState.classList.toggle("is-hidden", status.status === "loaded" || status.status === "loading");
+  if (status.status === "loading") {
+    emptyStateMark.textContent = "...";
+    emptyStateTitle.textContent = "Loading model";
+    emptyStateMessage.textContent = status.fileName;
+  } else if (status.status === "error") {
+    emptyStateMark.textContent = "!";
+    emptyStateTitle.textContent = "Model load failed";
+    emptyStateMessage.textContent = status.fileName ? `${status.fileName}: ${status.message}` : status.message;
+  } else {
+    emptyStateMark.textContent = "VRM";
+    emptyStateTitle.textContent = "No model loaded";
+    emptyStateMessage.textContent = "Select a local .vrm file or load a model URL to start.";
+  }
+
+  emptyState.classList.toggle("is-hidden", status.status === "loaded");
 }
 
 function updatePhaseButtons(phase: AvatarPhase): void {
@@ -198,6 +227,8 @@ function disconnectSse(updateUi = true): void {
 function updateSseStatus(status: SseConnectionStatus): void {
   sseStatus.dataset.state = status.state;
   sseStatus.textContent = status.state;
+  sseGlobalStatus.dataset.state = status.state;
+  sseGlobalStatus.textContent = `SSE ${status.state}`;
   updateSseDetail(status.message);
 }
 
@@ -205,10 +236,31 @@ function updateSseDetail(message: string): void {
   sseDetail.textContent = message;
 }
 
-function hydrateSseSettingsFromUrl(): void {
+function hydrateSettingsFromUrl(): void {
   const params = new URLSearchParams(window.location.search);
+  modelUrlInput.value = params.get("model") ?? "";
   eventsUrlInput.value = params.get("events") ?? "";
   eventsTokenInput.value = params.get("events_token") ?? params.get("token") ?? "";
+}
+
+async function loadModelFromUrl(input: string): Promise<void> {
+  const url = input.trim();
+  if (!url) {
+    updateLoadStatus({ status: "idle", message: "No model" });
+    return;
+  }
+
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (parsed.username || parsed.password) {
+      throw new Error("Model URL must not include embedded credentials.");
+    }
+    await renderer.loadVRMUrl(parsed.toString());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid model URL";
+    updateLoadStatus({ status: "error", message, fileName: url });
+    console.error(error);
+  }
 }
 
 function redactAvatarEvent(event: unknown): unknown {

@@ -1,4 +1,4 @@
-import { type AvatarEmotion, type AvatarPhase, type AvatarStateEvent } from "../avatar/types";
+import { type AvatarEmotion, type AvatarPhase, type AvatarSpeechCue, type AvatarStateEvent } from "../avatar/types";
 
 export type SwordVoiceAgentEvent = {
   event_id?: string;
@@ -181,7 +181,8 @@ export class SwordVoiceAgentAdapter {
       emotion,
       text: stringValue(payload.text) || undefined,
       terminal,
-      ttsPhase: phase
+      ttsPhase: phase,
+      speech: speechCueFromTtsPayload(payload, phase)
     });
   }
 
@@ -197,6 +198,7 @@ export class SwordVoiceAgentAdapter {
       startsTurn?: boolean;
       terminal?: boolean;
       ttsPhase?: string;
+      speech?: AvatarSpeechCue;
     }
   ): AvatarStateCandidate {
     const payload = eventPayload(raw);
@@ -206,6 +208,7 @@ export class SwordVoiceAgentAdapter {
       phase: options.phase,
       emotion: options.emotion,
       gesture: options.gesture,
+      speech: options.speech,
       turn_id: turnId || undefined,
       text: cleanText(options.text),
       timestamp: timestampMs(raw.timestamp)
@@ -255,6 +258,33 @@ function cleanText(value: string | undefined): string | undefined {
   return text;
 }
 
+function speechCueFromTtsPayload(payload: Record<string, unknown>, phase: string): AvatarSpeechCue {
+  const speech: AvatarSpeechCue = {
+    state: phase || "speaking",
+    source: "tts.state"
+  };
+
+  const rms = numberValue(payload.rms);
+  const volume = numberValue(payload.volume ?? payload.app_volume);
+  if (rms !== null) {
+    speech.rms = rms;
+  }
+  if (volume !== null) {
+    speech.volume = volume;
+  }
+
+  const viseme = stringValue(payload.viseme);
+  const phoneme = stringValue(payload.phoneme);
+  if (viseme) {
+    speech.viseme = viseme;
+  }
+  if (phoneme) {
+    speech.phoneme = phoneme;
+  }
+
+  return speech;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -269,4 +299,11 @@ function stringValue(value: unknown): string {
 
 function booleanValue(value: unknown): boolean {
   return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.min(1, value));
 }

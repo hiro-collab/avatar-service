@@ -80,12 +80,49 @@ h1 {
   text-align: center;
 }
 
+.status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-pill {
+  min-width: 132px;
+  padding: 8px 12px;
+  border: 1px solid #c9d2ca;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #34423a;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .runtime-status[data-status="loading"] {
   border-color: #8fae9f;
   color: #1f6d55;
 }
 
 .runtime-status[data-status="error"] {
+  border-color: #d6aaa2;
+  color: #9a3728;
+}
+
+.status-pill[data-state="connected"] {
+  border-color: #8fae9f;
+  color: #1f6d55;
+}
+
+.status-pill[data-state="connecting"],
+.status-pill[data-state="stale"] {
+  border-color: #d8bd86;
+  color: #93621e;
+}
+
+.status-pill[data-state="auth_error"],
+.status-pill[data-state="disconnected"] {
   border-color: #d6aaa2;
   color: #9a3728;
 }
@@ -137,6 +174,15 @@ h1 {
   color: #2f6d5d;
   font-size: 18px;
   font-weight: 800;
+}
+
+.empty-state[data-status="loading"] .empty-state__mark {
+  color: #1f6d55;
+}
+
+.empty-state[data-status="error"] .empty-state__mark {
+  border-color: #d6aaa2;
+  color: #9a3728;
 }
 
 .empty-state strong {
@@ -225,6 +271,10 @@ h2 {
   background: #f7f8f5;
   color: #26312b;
   font-size: 13px;
+}
+
+.model-url-loader {
+  margin-top: 14px;
 }
 
 .segmented {
@@ -384,6 +434,11 @@ h2 {
   }
 
   .runtime-status {
+    width: 100%;
+  }
+
+  .status-strip,
+  .status-pill {
     width: 100%;
   }
 

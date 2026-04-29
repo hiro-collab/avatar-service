@@ -41,6 +41,7 @@ export class AvatarController {
   private blinkValue = 0;
   private blinkProgress = 0;
   private nextBlinkAt = 1.2;
+  private speechMouthLevel: number | null = null;
 
   setVRM(vrm: VRM | null): void {
     this.vrm = vrm;
@@ -63,6 +64,7 @@ export class AvatarController {
   applyState(event: AvatarStateEvent): void {
     this.phase = event.phase;
     this.emotion = event.emotion ?? this.defaultEmotionForPhase(event.phase);
+    this.speechMouthLevel = this.speechLevelFromEvent(event);
   }
 
   update(delta: number, elapsed: number): void {
@@ -113,7 +115,11 @@ export class AvatarController {
   private getTargetPose(elapsed: number): MotionPose {
     const breath = Math.sin(elapsed * 1.5) * 0.018;
     const smallNod = Math.sin(elapsed * 2.1) * 0.012;
-    const speakingMouth = 0.18 + Math.pow(0.5 + Math.sin(elapsed * 18) * 0.5, 1.3) * 0.78;
+    const proceduralMouth = 0.18 + Math.pow(0.5 + Math.sin(elapsed * 18) * 0.5, 1.3) * 0.78;
+    const speechMouth =
+      this.speechMouthLevel === null
+        ? proceduralMouth
+        : MathUtils.clamp(0.08 + this.speechMouthLevel * (0.62 + Math.sin(elapsed * 16) * 0.18), 0, 1);
 
     switch (this.phase) {
       case "listening":
@@ -144,7 +150,7 @@ export class AvatarController {
           neckPitch: 0,
           chestPitch: -0.035 + breath,
           spinePitch: -0.012,
-          mouthOpen: speakingMouth
+          mouthOpen: speechMouth
         };
       case "error":
         return {
@@ -236,6 +242,19 @@ export class AvatarController {
       default:
         return "neutral";
     }
+  }
+
+  private speechLevelFromEvent(event: AvatarStateEvent): number | null {
+    if (event.phase !== "speaking") {
+      return null;
+    }
+
+    const value = event.speech?.rms ?? event.speech?.volume;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+
+    return MathUtils.clamp(value, 0, 1);
   }
 
   private setExpression(name: string, value: number): void {

@@ -1,6 +1,8 @@
 node_modules
 dist
 .vite
+.vrm/
+public/models/*.vrm
 .env
 .env.local
 .dev-server.json
