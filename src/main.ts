@@ -7,7 +7,7 @@ import {
   installPostMessageAvatarBridge,
   subscribeAvatarState
 } from "./avatar/events";
-import { type AvatarEmotion, type AvatarPhase, AVATAR_PHASES } from "./avatar/types";
+import { type AvatarEmotion, type AvatarPhase, type AvatarPostureCue, AVATAR_PHASES } from "./avatar/types";
 import { AvatarStateResolver } from "./integrations/avatarStateResolver";
 import { SseConnector, type SseConnectionStatus } from "./integrations/sse";
 import { SwordVoiceAgentAdapter } from "./integrations/swordVoiceAgent";
@@ -23,6 +23,9 @@ const phaseReadout = getElement<HTMLElement>("phase-readout");
 const phaseButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-phase]"));
 const emotionSelect = getElement<HTMLSelectElement>("emotion-select");
 const gestureSelect = getElement<HTMLSelectElement>("gesture-select");
+const postureSelect = getElement<HTMLSelectElement>("posture-select");
+const postureIntensityInput = getElement<HTMLInputElement>("posture-intensity-input");
+const postureIntensityReadout = getElement<HTMLOutputElement>("posture-intensity-readout");
 const turnIdInput = getElement<HTMLInputElement>("turn-id-input");
 const textInput = getElement<HTMLTextAreaElement>("text-input");
 const dispatchButton = getElement<HTMLButtonElement>("dispatch-button");
@@ -52,10 +55,18 @@ const unsubscribeState = subscribeAvatarState((event) => {
   if (event.emotion) {
     emotionSelect.value = event.emotion;
   }
+  if (event.posture?.preset) {
+    postureSelect.value = hasSelectOption(postureSelect, event.posture.preset) ? event.posture.preset : "auto";
+  }
+  if (typeof event.posture?.intensity === "number") {
+    postureIntensityInput.value = String(Math.max(0, Math.min(1, event.posture.intensity)));
+    updatePostureIntensityReadout();
+  }
   eventPreview.textContent = JSON.stringify(redactAvatarEvent(event), null, 2);
 });
 
 hydrateSettingsFromUrl();
+updatePostureIntensityReadout();
 dispatchManualState("idle");
 
 fileInput.addEventListener("change", async () => {
@@ -88,6 +99,7 @@ dispatchButton.addEventListener("click", () => {
   dispatchManualState(controller.getCurrentPhase());
 });
 
+postureIntensityInput.addEventListener("input", updatePostureIntensityReadout);
 connectEventsButton.addEventListener("click", connectSse);
 disconnectEventsButton.addEventListener("click", () => disconnectSse());
 preferTtsInput.addEventListener("change", () => {
@@ -114,6 +126,7 @@ function dispatchManualState(phase: AvatarPhase): void {
     phase,
     emotion: emotionSelect.value as AvatarEmotion,
     gesture: gestureSelect.value,
+    posture: manualPostureCue(),
     turn_id: turnIdInput.value.trim() || undefined,
     text: textInput.value.trim() || undefined
   });
@@ -154,6 +167,23 @@ function updatePhaseButtons(phase: AvatarPhase): void {
   for (const button of phaseButtons) {
     button.classList.toggle("is-active", button.dataset.phase === phase);
   }
+}
+
+function manualPostureCue(): AvatarPostureCue | undefined {
+  const preset = postureSelect.value.trim();
+  if (!preset || preset === "auto") {
+    return undefined;
+  }
+
+  return {
+    preset,
+    intensity: Number(postureIntensityInput.value),
+    source: "manual_ui"
+  };
+}
+
+function updatePostureIntensityReadout(): void {
+  postureIntensityReadout.textContent = Number(postureIntensityInput.value).toFixed(2);
 }
 
 function connectSse(): void {
@@ -289,4 +319,8 @@ function getElement<T extends HTMLElement>(id: string): T {
 
 function isPhase(value: unknown): value is AvatarPhase {
   return typeof value === "string" && AVATAR_PHASES.includes(value as AvatarPhase);
+}
+
+function hasSelectOption(select: HTMLSelectElement, value: string): boolean {
+  return Array.from(select.options).some((option) => option.value === value);
 }

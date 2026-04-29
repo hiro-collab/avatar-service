@@ -1,4 +1,10 @@
-import { type AvatarEmotion, type AvatarPhase, type AvatarSpeechCue, type AvatarStateEvent } from "../avatar/types";
+import {
+  type AvatarEmotion,
+  type AvatarPhase,
+  type AvatarPostureCue,
+  type AvatarSpeechCue,
+  type AvatarStateEvent
+} from "../avatar/types";
 
 export type SwordVoiceAgentEvent = {
   event_id?: string;
@@ -36,7 +42,8 @@ export class SwordVoiceAgentAdapter {
       return this.makeCandidate(raw, sourceType, {
         phase: "error",
         emotion: "troubled",
-        text: errorText(raw)
+        text: errorText(raw),
+        posture: postureCue("lean_back", 0.45, sourceType)
       });
     }
 
@@ -51,7 +58,8 @@ export class SwordVoiceAgentAdapter {
     if (sourceType === "dify.first_token") {
       return this.makeCandidate(raw, sourceType, {
         phase: "thinking",
-        emotion: "serious"
+        emotion: "serious",
+        posture: postureCue("thinking", 0.35, sourceType)
       });
     }
 
@@ -95,6 +103,11 @@ export class SwordVoiceAgentAdapter {
       phase: hasVoiceCommand ? "thinking" : active || inputEnabled ? "listening" : "idle",
       emotion: hasVoiceCommand ? "serious" : "neutral",
       gesture: active ? "sword_sign" : "none",
+      posture: hasVoiceCommand
+        ? postureCue("thinking", 0.35, sourceType)
+        : active || inputEnabled
+          ? postureCue("attentive", 0.35, sourceType)
+          : undefined,
       turnId,
       text: hasVoiceCommand ? action : undefined,
       startsTurn: active || inputEnabled || hasVoiceCommand
@@ -118,6 +131,7 @@ export class SwordVoiceAgentAdapter {
       return this.makeCandidate(raw, sourceType, {
         phase: "thinking",
         emotion: "serious",
+        posture: postureCue("thinking", 0.35, sourceType),
         text,
         startsTurn: true
       });
@@ -127,6 +141,7 @@ export class SwordVoiceAgentAdapter {
       return this.makeCandidate(raw, sourceType, {
         phase: "listening",
         emotion: "neutral",
+        posture: postureCue("attentive", 0.35, sourceType),
         startsTurn: true
       });
     }
@@ -143,6 +158,7 @@ export class SwordVoiceAgentAdapter {
       return this.makeCandidate(raw, sourceType, {
         phase: "error",
         emotion: "troubled",
+        posture: postureCue("lean_back", 0.45, sourceType),
         text: stringValue(payload.skip_reason) || undefined,
         terminal: true
       });
@@ -151,6 +167,7 @@ export class SwordVoiceAgentAdapter {
     return this.makeCandidate(raw, sourceType, {
       phase: "speaking",
       emotion: "happy",
+      posture: postureCue("speaking", 0.3, sourceType),
       text
     });
   }
@@ -179,6 +196,7 @@ export class SwordVoiceAgentAdapter {
     return this.makeCandidate(raw, sourceType, {
       phase: avatarPhase,
       emotion,
+      posture: postureCueForTtsPhase(avatarPhase, sourceType),
       text: stringValue(payload.text) || undefined,
       terminal,
       ttsPhase: phase,
@@ -198,6 +216,7 @@ export class SwordVoiceAgentAdapter {
       startsTurn?: boolean;
       terminal?: boolean;
       ttsPhase?: string;
+      posture?: AvatarPostureCue;
       speech?: AvatarSpeechCue;
     }
   ): AvatarStateCandidate {
@@ -208,6 +227,7 @@ export class SwordVoiceAgentAdapter {
       phase: options.phase,
       emotion: options.emotion,
       gesture: options.gesture,
+      posture: options.posture,
       speech: options.speech,
       turn_id: turnId || undefined,
       text: cleanText(options.text),
@@ -283,6 +303,24 @@ function speechCueFromTtsPayload(payload: Record<string, unknown>, phase: string
   }
 
   return speech;
+}
+
+function postureCueForTtsPhase(phase: AvatarPhase, sourceType: string): AvatarPostureCue | undefined {
+  if (phase === "speaking") {
+    return postureCue("speaking", 0.35, sourceType);
+  }
+  if (phase === "error") {
+    return postureCue("lean_back", 0.45, sourceType);
+  }
+  return undefined;
+}
+
+function postureCue(preset: string, intensity: number, source: string): AvatarPostureCue {
+  return {
+    preset,
+    intensity,
+    source
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

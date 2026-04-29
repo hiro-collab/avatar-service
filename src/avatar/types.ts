@@ -14,12 +14,45 @@ export type AvatarSpeechCue = {
   timestamp?: number;
 };
 
+export type AvatarPosturePreset =
+  | "auto"
+  | "neutral"
+  | "attentive"
+  | "thinking"
+  | "speaking"
+  | "bow"
+  | "lean_forward"
+  | "lean_back"
+  | "look_left"
+  | "look_right"
+  | "nod"
+  | "shake"
+  | string;
+
+export type AvatarRotationCue = {
+  pitch?: number;
+  yaw?: number;
+  roll?: number;
+};
+
+export type AvatarPostureCue = {
+  preset?: AvatarPosturePreset;
+  intensity?: number;
+  head?: AvatarRotationCue;
+  neck?: AvatarRotationCue;
+  chest?: AvatarRotationCue;
+  spine?: AvatarRotationCue;
+  source?: string;
+  timestamp?: number;
+};
+
 export type AvatarStateEvent = {
   type: "avatar_state";
   turn_id?: string;
   phase: AvatarPhase;
   emotion?: AvatarEmotion;
   gesture?: "sword_sign" | "none" | string;
+  posture?: AvatarPostureCue;
   speech?: AvatarSpeechCue;
   text?: string;
   timestamp?: number;

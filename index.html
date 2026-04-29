@@ -77,6 +77,29 @@
             </label>
 
             <label>
+              <span>Posture</span>
+              <select id="posture-select">
+                <option value="auto">auto</option>
+                <option value="neutral">neutral</option>
+                <option value="attentive">attentive</option>
+                <option value="thinking">thinking</option>
+                <option value="speaking">speaking</option>
+                <option value="bow">bow</option>
+                <option value="lean_forward">lean_forward</option>
+                <option value="lean_back">lean_back</option>
+                <option value="look_left">look_left</option>
+                <option value="look_right">look_right</option>
+                <option value="nod">nod</option>
+                <option value="shake">shake</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Posture Intensity <output id="posture-intensity-readout">1.00</output></span>
+              <input id="posture-intensity-input" type="range" min="0" max="1" step="0.05" value="1" />
+            </label>
+
+            <label>
               <span>Turn ID</span>
               <input id="turn-id-input" type="text" placeholder="turn-001" />
             </label>

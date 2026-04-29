@@ -354,6 +354,19 @@ h2 {
   padding: 0 10px;
 }
 
+.form-grid input[type="range"] {
+  height: 28px;
+  padding: 0;
+  accent-color: #28705a;
+}
+
+.form-grid output {
+  float: right;
+  color: #28705a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .form-grid textarea {
   min-height: 82px;
   padding: 10px;

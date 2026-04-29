@@ -1,6 +1,6 @@
 import { Euler, MathUtils, type Object3D } from "three";
 import { type VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
-import { type AvatarEmotion, type AvatarPhase, type AvatarStateEvent } from "./types";
+import { type AvatarEmotion, type AvatarPhase, type AvatarPostureCue, type AvatarStateEvent } from "./types";
 
 type HumanBoneName = (typeof VRMHumanBoneName)[keyof typeof VRMHumanBoneName];
 
@@ -12,6 +12,15 @@ type MotionPose = {
   chestPitch: number;
   spinePitch: number;
   mouthOpen: number;
+};
+
+type PostureOffset = {
+  headPitch?: number;
+  headYaw?: number;
+  headRoll?: number;
+  neckPitch?: number;
+  chestPitch?: number;
+  spinePitch?: number;
 };
 
 const CONTROLLED_BONES = [
@@ -41,6 +50,7 @@ export class AvatarController {
   private blinkValue = 0;
   private blinkProgress = 0;
   private nextBlinkAt = 1.2;
+  private posture: AvatarPostureCue | null = null;
   private speechMouthLevel: number | null = null;
 
   setVRM(vrm: VRM | null): void {
@@ -64,6 +74,7 @@ export class AvatarController {
   applyState(event: AvatarStateEvent): void {
     this.phase = event.phase;
     this.emotion = event.emotion ?? this.defaultEmotionForPhase(event.phase);
+    this.posture = event.posture ?? null;
     this.speechMouthLevel = this.speechLevelFromEvent(event);
   }
 
@@ -79,7 +90,7 @@ export class AvatarController {
   }
 
   private updatePose(delta: number, elapsed: number): void {
-    const target = this.getTargetPose(elapsed);
+    const target = this.applyPostureCue(this.getTargetPose(elapsed), elapsed);
 
     for (const key of Object.keys(this.currentPose) as (keyof MotionPose)[]) {
       this.currentPose[key] = MathUtils.damp(this.currentPose[key], target[key], 8, delta);
@@ -173,6 +184,100 @@ export class AvatarController {
           spinePitch: breath * 0.35,
           mouthOpen: 0
         };
+    }
+  }
+
+  private applyPostureCue(basePose: MotionPose, elapsed: number): MotionPose {
+    if (!this.posture || this.posture.preset === "auto") {
+      return basePose;
+    }
+
+    const intensity = MathUtils.clamp(this.posture.intensity ?? 1, 0, 1);
+    const offset = this.getPosturePresetOffset(this.posture.preset, elapsed);
+    const pose: MotionPose = { ...basePose };
+
+    pose.headPitch += (offset.headPitch ?? 0) * intensity;
+    pose.headYaw += (offset.headYaw ?? 0) * intensity;
+    pose.headRoll += (offset.headRoll ?? 0) * intensity;
+    pose.neckPitch += (offset.neckPitch ?? 0) * intensity;
+    pose.chestPitch += (offset.chestPitch ?? 0) * intensity;
+    pose.spinePitch += (offset.spinePitch ?? 0) * intensity;
+
+    this.applyRotationCue(pose, "head", intensity);
+    this.applyRotationCue(pose, "neck", intensity);
+    this.applyRotationCue(pose, "chest", intensity);
+    this.applyRotationCue(pose, "spine", intensity);
+
+    return pose;
+  }
+
+  private getPosturePresetOffset(preset: string | undefined, elapsed: number): PostureOffset {
+    switch (preset) {
+      case "neutral":
+        return {
+          headPitch: 0,
+          headYaw: 0,
+          headRoll: 0,
+          neckPitch: 0,
+          chestPitch: 0,
+          spinePitch: 0
+        };
+      case "attentive":
+        return { headPitch: -0.035, neckPitch: -0.02, chestPitch: -0.075, spinePitch: -0.025 };
+      case "thinking":
+        return { headPitch: 0.025, headYaw: -0.035, headRoll: 0.12, chestPitch: 0.015 };
+      case "speaking":
+        return {
+          headPitch: Math.sin(elapsed * 2.2) * 0.018,
+          headYaw: Math.sin(elapsed * 1.4) * 0.02,
+          chestPitch: -0.035,
+          spinePitch: -0.012
+        };
+      case "bow":
+        return { headPitch: 0.1, neckPitch: 0.055, chestPitch: -0.2, spinePitch: -0.08 };
+      case "lean_forward":
+        return { headPitch: -0.025, neckPitch: -0.02, chestPitch: -0.13, spinePitch: -0.05 };
+      case "lean_back":
+        return { headPitch: 0.035, neckPitch: 0.015, chestPitch: 0.095, spinePitch: 0.045 };
+      case "look_left":
+        return { headYaw: 0.24, headRoll: -0.025 };
+      case "look_right":
+        return { headYaw: -0.24, headRoll: 0.025 };
+      case "nod":
+        return { headPitch: Math.sin(elapsed * 5.6) * 0.11, neckPitch: Math.sin(elapsed * 5.6) * 0.035 };
+      case "shake":
+        return { headYaw: Math.sin(elapsed * 6.4) * 0.16, neckPitch: 0.005 };
+      default:
+        return {};
+    }
+  }
+
+  private applyRotationCue(pose: MotionPose, target: "head" | "neck" | "chest" | "spine", intensity: number): void {
+    const rotation = this.posture?.[target];
+    if (!rotation) {
+      return;
+    }
+
+    const pitch = MathUtils.clamp(rotation.pitch ?? 0, -0.7, 0.7) * intensity;
+    const yaw = MathUtils.clamp(rotation.yaw ?? 0, -0.7, 0.7) * intensity;
+    const roll = MathUtils.clamp(rotation.roll ?? 0, -0.7, 0.7) * intensity;
+
+    if (target === "head") {
+      pose.headPitch += pitch;
+      pose.headYaw += yaw;
+      pose.headRoll += roll;
+    } else if (target === "neck") {
+      pose.neckPitch += pitch;
+      pose.headYaw += yaw * 0.35;
+      pose.headRoll += roll * 0.35;
+    } else if (target === "chest") {
+      pose.chestPitch += pitch;
+      pose.headYaw += yaw * 0.12;
+      pose.headRoll += roll * 0.12;
+    } else {
+      pose.spinePitch += pitch;
+      pose.chestPitch += yaw * 0.08;
+      pose.headRoll += roll * 0.08;
     }
   }
 

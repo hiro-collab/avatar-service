@@ -1,6 +1,8 @@
 import {
   type AvatarEmotion,
   type AvatarPhase,
+  type AvatarPostureCue,
+  type AvatarRotationCue,
   type AvatarSpeechCue,
   type AvatarStateEvent,
   isAvatarEmotion,
@@ -15,6 +17,7 @@ type AvatarStatePayload = {
   phase?: unknown;
   emotion?: unknown;
   gesture?: unknown;
+  posture?: unknown;
   speech?: unknown;
   text?: unknown;
   timestamp?: unknown;
@@ -47,6 +50,11 @@ export function toAvatarStateEvent(value: unknown): AvatarStateEvent | null {
     event.gesture = payload.gesture;
   }
 
+  const posture = toAvatarPostureCue(payload.posture);
+  if (posture) {
+    event.posture = posture;
+  }
+
   const speech = toAvatarSpeechCue(payload.speech);
   if (speech) {
     event.speech = speech;
@@ -67,6 +75,7 @@ export function createAvatarStateEvent(input: {
   phase: AvatarPhase;
   emotion?: AvatarEmotion;
   gesture?: string;
+  posture?: AvatarPostureCue;
   speech?: AvatarSpeechCue;
   turn_id?: string;
   text?: string;
@@ -76,6 +85,7 @@ export function createAvatarStateEvent(input: {
     phase: input.phase,
     emotion: input.emotion,
     gesture: input.gesture,
+    posture: input.posture,
     speech: input.speech,
     turn_id: input.turn_id,
     text: input.text,
@@ -132,6 +142,56 @@ function toAvatarSpeechCue(value: unknown): AvatarSpeechCue | null {
   }
 
   for (const key of ["volume", "rms", "timestamp"] as const) {
+    if (typeof payload[key] === "number" && Number.isFinite(payload[key])) {
+      cue[key] = payload[key];
+    }
+  }
+
+  return Object.keys(cue).length > 0 ? cue : null;
+}
+
+function toAvatarPostureCue(value: unknown): AvatarPostureCue | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const cue: AvatarPostureCue = {};
+
+  if (typeof payload.preset === "string" && payload.preset.length > 0) {
+    cue.preset = payload.preset;
+  }
+
+  if (typeof payload.intensity === "number" && Number.isFinite(payload.intensity)) {
+    cue.intensity = payload.intensity;
+  }
+
+  for (const key of ["head", "neck", "chest", "spine"] as const) {
+    const rotation = toAvatarRotationCue(payload[key]);
+    if (rotation) {
+      cue[key] = rotation;
+    }
+  }
+
+  if (typeof payload.source === "string" && payload.source.length > 0) {
+    cue.source = payload.source;
+  }
+
+  if (typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)) {
+    cue.timestamp = payload.timestamp;
+  }
+
+  return Object.keys(cue).length > 0 ? cue : null;
+}
+
+function toAvatarRotationCue(value: unknown): AvatarRotationCue | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const cue: AvatarRotationCue = {};
+  for (const key of ["pitch", "yaw", "roll"] as const) {
     if (typeof payload[key] === "number" && Number.isFinite(payload[key])) {
       cue[key] = payload[key];
     }
