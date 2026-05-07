@@ -186,6 +186,14 @@ async function stopRecordedProcess(options) {
     return;
   }
 
+  const ready = await isReady(state.url, 1_000);
+  if (!ready) {
+    throw new Error(
+      `Refusing to stop recorded pid=${state.pid} because ${state.url} is not ready. ` +
+        "The PID file may be stale; inspect the process before stopping it manually."
+    );
+  }
+
   process.kill(state.pid, "SIGTERM");
   const stopped = await waitUntilStopped(state.pid, defaultStopTimeoutMs);
   if (!stopped) {
